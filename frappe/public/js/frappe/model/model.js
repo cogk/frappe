@@ -209,6 +209,10 @@ $.extend(frappe.model, {
 	},
 
 	set_in_localstorage: function (doctype, docs) {
+		if (docs?.length > 1) {
+			// Cache each doctype individually in localstorage
+			return docs.forEach((doc) => frappe.model.set_in_localstorage(doc.name, [doc]));
+		}
 		try {
 			localStorage["_doctype:" + doctype] = JSON.stringify(docs);
 		} catch (e) {
