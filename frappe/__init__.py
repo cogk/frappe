@@ -20,7 +20,7 @@ import re
 import unicodedata
 import warnings
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, Optional, TypeAlias, overload
+from typing import TYPE_CHECKING, Any, Literal, NoReturn, Optional, TypeAlias, overload
 
 import click
 from werkzeug.local import Local, release_local
@@ -551,7 +551,7 @@ def throw(
 	is_minimizable: bool = False,
 	wide: bool = False,
 	as_list: bool = False,
-) -> None:
+) -> NoReturn:
 	"""Throw execption and show message (`msgprint`).
 
 	:param msg: Message.
