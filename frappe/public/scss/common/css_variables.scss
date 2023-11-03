@@ -133,6 +133,11 @@ $disabled-input-height: 22px;
 	--input-height: #{$input-height};
 	--input-disabled-bg: var(--gray-200);
 
+	// date-picker
+	--date-active-text: var(--gray-100);
+	--date-active-bg: var(--gray-900);
+	--date-range-bg: var(--subtle-fg);
+
 	// Checkbox
 	--checkbox-right-margin: var(--margin-xs);
 	--checkbox-size: 14px;
