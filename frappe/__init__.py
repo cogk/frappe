@@ -2051,7 +2051,12 @@ def get_print(
 		html = get_response_content("printview")
 
 	if as_pdf:
-		return get_pdf(html, options=pdf_options, output=output)
+		pdf = get_pdf(html, options=pdf_options, output=output)
+
+		if doctype and name and isinstance(pdf, bytes):
+			for hook in get_hooks("postprocess_document_pdf"):
+				pdf = get_attr(hook)(pdf=pdf, doctype=doctype, name=name, print_format=print_format) or pdf
+		return pdf
 	else:
 		return html
 

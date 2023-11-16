@@ -13,6 +13,11 @@ def download_pdf(doctype, name, print_format, letterhead=None):
 	doc.check_permission("print")
 	generator = PrintFormatGenerator(print_format, doc, letterhead)
 	pdf = generator.render_pdf()
+	if doctype and name and isinstance(pdf, bytes):
+		for hook in frappe.get_hooks("postprocess_document_pdf"):
+			pdf = (
+				frappe.get_attr(hook)(pdf=pdf, doctype=doctype, name=name, print_format=print_format) or pdf
+			)
 
 	frappe.local.response.filename = "{name}.pdf".format(
 		name=name.replace(" ", "-").replace("/", "-")
