@@ -203,5 +203,5 @@ class TestBoilerPlate(unittest.TestCase):
 		self.assertTrue(patch_creator.patch_file.exists())
 
 		# Cleanup
-		shutil.rmtree(patch_creator.patch_file.parents[0])
+		patch_creator.patch_file.unlink()
 		patches_txt.write_text(original_patches)
