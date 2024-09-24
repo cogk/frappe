@@ -55,6 +55,18 @@ class TestDocumentFollow(FrappeTestCase):
 			self.assertEqual(doc.user, user.name)
 		self.assertEqual(len(get_document_followed_by_user(user.name)), 20)
 
+	def test_message_if_not_document_follow_notify(self):
+		user = get_user()
+		event = get_event()
+		frappe.clear_messages()
+
+		user.db_set("document_follow_notify", 0)
+		self.assertFalse(frappe.get_message_log())
+		document_follow.follow_document(event.doctype, event.name, user.name, throw=True)
+		self.assertFalse(get_events_followed_by_user(event.name, user.name))
+		self.assertTrue(frappe.get_message_log())
+		frappe.clear_messages()
+
 	def test_follow_on_create(self):
 		user = get_user(DocumentFollowConditions(1))
 		frappe.set_user(user.name)
