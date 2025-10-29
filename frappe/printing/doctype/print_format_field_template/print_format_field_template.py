@@ -21,10 +21,10 @@ class PrintFormatFieldTemplate(Document):
 		standard: DF.Check
 		template: DF.Code | None
 		template_file: DF.Data | None
-
 	# end: auto-generated types
+
 	def validate(self):
-		if self.standard and not (frappe.conf.developer_mode or frappe.flags.in_patch):
+		if self.standard and not frappe.conf.developer_mode and not frappe.flags.in_patch:
 			frappe.throw(_("Enable developer mode to create a standard Print Template"))
 
 	def before_insert(self):
@@ -47,7 +47,7 @@ class PrintFormatFieldTemplate(Document):
 		if result:
 			frappe.throw(
 				_("A template already exists for field {0} of {1}").format(
-					frappe.bold(self.field), frappe.bold(self.document_type)
+					frappe.bold(self.field), frappe.bold(_(self.document_type))
 				),
 				frappe.DuplicateEntryError,
 				title=_("Duplicate Entry"),

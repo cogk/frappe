@@ -1,10 +1,4 @@
-frappe.ui.get_print_settings = function (
-	pdf,
-	callback,
-	letter_head,
-	pick_columns,
-	has_filters = false
-) {
+frappe.ui.get_print_settings = function (pdf, callback, letter_head, pick_columns) {
 	var print_settings = locals[":Print Settings"]["Print Settings"];
 
 	var company = frappe.defaults.get_default("company");
@@ -15,30 +9,6 @@ frappe.ui.get_print_settings = function (
 	}
 
 	var columns = [
-		{
-			fieldtype: "Select",
-			fieldname: "orientation",
-			label: __("Orientation"),
-			options: [
-				{ value: "Landscape", label: __("Landscape") },
-				{ value: "Portrait", label: __("Portrait") },
-			],
-			default: "Landscape",
-		},
-		{
-			fieldtype: "Link",
-			fieldname: "report",
-			label: __("Report"),
-			options: "Print Format",
-			get_query: () => ({
-				filters: {
-					print_format_for: "Report",
-					print_format_type: "JS",
-					report: frappe.query_report ? frappe.query_report.report_name : "",
-					disabled: 0,
-				},
-			}),
-		},
 		{
 			fieldtype: "Check",
 			fieldname: "with_letter_head",
@@ -52,15 +22,17 @@ frappe.ui.get_print_settings = function (
 			options: "Letter Head",
 			default: letter_head || default_letter_head,
 		},
+		{
+			fieldtype: "Select",
+			fieldname: "orientation",
+			label: __("Orientation"),
+			options: [
+				{ value: "Landscape", label: __("Landscape") },
+				{ value: "Portrait", label: __("Portrait") },
+			],
+			default: "Landscape",
+		},
 	];
-
-	if (has_filters) {
-		columns.push({
-			label: __("Include filters"),
-			fieldtype: "Check",
-			fieldname: "include_filters",
-		});
-	}
 
 	if (pick_columns) {
 		columns.push(

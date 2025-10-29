@@ -2,6 +2,7 @@
 <html lang="{{ lang }}" dir="{{ layout_direction }}">
 <head>
 	<meta charset="utf-8">
+	<meta name="robots" content="noindex"/>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>{{ title }}</title>
 	<meta name="generator" content="frappe">
@@ -29,7 +30,7 @@
 	</div>
 	<script>
 		document.addEventListener('DOMContentLoaded', () => {
-			const page_div = document.querySelector('.page-break');
+			const page_div = document.querySelector('.page-section');
 
 			if (page_div) {
 				page_div.style.display = 'flex';

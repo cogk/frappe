@@ -12,7 +12,7 @@ import cssutils
 import pdfkit
 from bs4 import BeautifulSoup
 from packaging.version import Version
-from pypdf import PdfReader, PdfWriter, errors
+from pypdf import PdfReader, PdfWriter
 
 import frappe
 from frappe import _
@@ -27,6 +27,9 @@ PDF_CONTENT_ERRORS = [
 	"UnknownContentError",
 	"RemoteHostClosedError",
 ]
+
+logger = frappe.logger("wkhtmltopdf", max_size=100000, file_count=3)
+logger.setLevel("INFO")
 
 
 def pdf_header_html(soup, head, content, styles, html_id, css, path=None):
@@ -61,7 +64,7 @@ def pdf_body_html(template, args, **kwargs):
 
 
 def _guess_template_error_line_number(template) -> int | None:
-	"""Guess line on which exception occured from current traceback."""
+	"""Guess line on which exception occurred from current traceback."""
 	with contextlib.suppress(Exception):
 		import sys
 		import traceback
@@ -79,9 +82,10 @@ def pdf_footer_html(soup, head, content, styles, html_id, css, path=None):
 	)
 
 
-def get_pdf(html, options=None, output: PdfWriter | None = None):
+def get_pdf(html, options=None, output: PdfWriter | None = None, cover: "CoverPages.Spec" = None):
 	html = scrub_urls(html)
 	html, options = prepare_options(html, options)
+	cover_pages = CoverPages(cover)
 
 	options.update({"disable-javascript": "", "disable-local-file-access": ""})
 
@@ -90,20 +94,24 @@ def get_pdf(html, options=None, output: PdfWriter | None = None):
 		options.update({"disable-smart-shrinking": ""})
 
 	try:
+		# wkhtmltopdf writes the pdf to stdout and errors to stderr
+		# pdfkit v1.0.0 writes the pdf to file or returns it
+		# stderr is written to sys.stdout if verbose=True is supplied
 		# Set filename property to false, so no file is actually created
-		filedata = pdfkit.from_string(html, options=options or {}, verbose=True)
+		# defaults to redirecting stdout
+		filedata = pdfkit.from_string(html, False, options=options or {}, verbose=True)
 
 		# create in-memory binary streams from filedata and create a PdfReader object
 		reader = PdfReader(io.BytesIO(filedata))
 	except OSError as e:
 		if any([error in str(e) for error in PDF_CONTENT_ERRORS]):
 			if not filedata:
-				print(html, options)
 				frappe.throw(_("PDF generation failed because of broken image links"))
 
 			# allow pdfs with missing images if file got created
 			if output:
-				output.append_pages_from_reader(reader)
+				with cover_pages.apply_to(output):
+					output.append_pages_from_reader(reader)
 		else:
 			raise
 	finally:
@@ -113,11 +121,13 @@ def get_pdf(html, options=None, output: PdfWriter | None = None):
 		password = options["password"]
 
 	if output:
-		output.append_pages_from_reader(reader)
+		with cover_pages.apply_to(output):
+			output.append_pages_from_reader(reader)
 		return output
 
 	writer = PdfWriter()
-	writer.append_pages_from_reader(reader)
+	with cover_pages.apply_to(writer):
+		writer.append_pages_from_reader(reader)
 
 	if "password" in options:
 		writer.encrypt(password)
@@ -148,7 +158,6 @@ def prepare_options(html, options):
 			"print-media-type": None,
 			"background": None,
 			"images": None,
-			"quiet": None,
 			# 'no-outline': None,
 			"encoding": "UTF-8",
 			# 'load-error-handling': 'ignore'
@@ -194,7 +203,9 @@ def get_cookie_options():
 
 		# Remove port from request.host
 		# https://werkzeug.palletsprojects.com/en/0.16.x/wrappers/#werkzeug.wrappers.BaseRequest.host
-		domain = frappe.utils.get_host_name().split(":", 1)[0]
+		domain = ""
+		if hasattr(frappe.local, "request"):
+			domain = frappe.utils.get_host_name().split(":", 1)[0]
 		with open(cookiejar, "w") as f:
 			f.write(f"sid={frappe.session.sid}; Domain={domain};\n")
 
@@ -283,7 +294,7 @@ def _get_base64_image(src):
 		mime_type = mimetypes.guess_type(path)[0]
 		if mime_type is None or not mime_type.startswith("image/"):
 			return
-		filename = (query.get("fid") and query["fid"][0]) or None
+		filename = query.get("fid") and query["fid"][0] or None
 		file = find_file_by_url(path, name=filename)
 		if not file or not file.is_private:
 			return
@@ -382,42 +393,46 @@ def get_wkhtmltopdf_version():
 	return wkhtmltopdf_version or "0"
 
 
-def pdf_contains_js(file_content: bytes):
-	"""
-	Check if a PDF file contains JavaScript.
+class CoverPages:
+	from contextlib import contextmanager
 
-	Args:
-	        file_content (bytes): The content of the PDF file.
+	Spec = str | dict[str, list[str | None]] | None
 
-	Returns:
-	        bool: True if the PDF contains JavaScript, False otherwise and also if the file is encrypted.
-	"""
-	from io import BytesIO
+	def __init__(self, cover: Spec) -> None:
+		self.front: list[str] = []
+		self.back: list[str] = []
 
-	reader = PdfReader(BytesIO(file_content))
+		if isinstance(cover, str):
+			self.front.append(cover)
+		elif isinstance(list, str):
+			self.front.extend(cover)
+		elif isinstance(cover, dict):
+			self.front.extend(cover.get("front", []))
+			self.back.extend(cover.get("back", []))
 
-	def has_javascript(obj):
-		if isinstance(obj, dict):
-			for key, value in obj.items():
-				if key in ("/JS", "/JavaScript"):
-					return True
-				if has_javascript(value):
-					return True
-		elif isinstance(obj, list):
-			for item in obj:
-				if has_javascript(item):
-					return True
-		return False
+	def append_all(self, output: PdfWriter, names: list[str]):
+		for cover_page_name in names:
+			if cover_page := self.read(cover_page_name):
+				output.append_pages_from_reader(cover_page)
 
-	root = reader.trailer.get("/Root", {})
-	if has_javascript(root):
-		return True
+	def read(self, cover_page_name: str):
+		from contextlib import suppress
 
-	try:
-		for page in reader.pages:
-			if has_javascript(page):
-				return True
-	except errors.FileNotDecryptedError:
-		pass
+		if not cover_page_name or not isinstance(cover_page_name, str):
+			return
 
-	return False
+		file_url = frappe.db.get_value("Cover Page", cover_page_name, "cover_page")
+		file_name = frappe.db.exists("File", dict(file_url=file_url))
+		if not file_name:
+			return
+
+		with suppress(frappe.DoesNotExistError):
+			file_doc = frappe.get_doc("File", file_name)
+			with open(file_doc.get_full_path(), "rb") as f:
+				return PdfReader(io.BytesIO(f.read()))
+
+	@contextmanager
+	def apply_to(self, output: PdfWriter):
+		self.append_all(output, self.front)
+		yield  # yield to allow caller to append pages in between the cover pages
+		self.append_all(output, self.back)

@@ -140,7 +140,6 @@ frappe.ui.form.PrintView = class {
 		if (df.fieldtype == "Select") {
 			df.input_class = "btn btn-default btn-sm text-left";
 		}
-
 		let field = frappe.ui.form.make_control({
 			df: df,
 			parent: is_dynamic ? this.sidebar_dynamic_section : this.sidebar,
@@ -184,20 +183,13 @@ frappe.ui.form.PrintView = class {
 		this.set_breadcrumbs();
 		this.setup_customize_dialog();
 
-		// print designer link
-		if (Object.keys(frappe.boot.versions).includes("print_designer")) {
-			this.page.add_inner_message(`
-			<a style="line-height: 2.4" href="/app/print-designer?doctype=${this.frm.doctype}">
-				${__("Try the new Print Designer")}
-			</a>
-			`);
-		} else {
-			this.page.add_inner_message(`
-			<a style="line-height: 2.4" href="https://frappecloud.com/marketplace/apps/print_designer?utm_source=framework-desk&utm_medium=print-view&utm_campaign=try-link">
-				${__("Try the new Print Designer")}
-			</a>
-			`);
-		}
+		// print format builder beta => Hide for now => Implementation is not complete
+		// this.page.add_inner_message(`
+		// 	<a style="line-height: 2.4" href="/app/print-format-builder-beta?doctype=${this.frm.doctype}">
+		// 		${__("Try the new Print Format Builder")}
+		// 	</a>
+		// `);
+
 		let tasks = [
 			this.set_default_print_format,
 			this.set_default_print_language,
@@ -275,11 +267,11 @@ frappe.ui.form.PrintView = class {
 					fieldtype: "Read Only",
 					default: print_format.name || "Standard",
 				},
-				{
-					label: __("Use the new Print Format Builder"),
-					fieldname: "beta",
-					fieldtype: "Check",
-				},
+				// {
+				// 	label: __("Use the new Print Format Builder"),
+				// 	fieldname: "beta",
+				// 	fieldtype: "Check",
+				// },
 			],
 			(data) => {
 				frappe.route_options = {
@@ -366,6 +358,10 @@ frappe.ui.form.PrintView = class {
 		this.lang_code = this.language_selector.val();
 	}
 
+	get_language_options() {
+		return frappe.get_languages();
+	}
+
 	set_default_print_language() {
 		let print_format = this.get_print_format();
 		this.lang_code =
@@ -398,6 +394,8 @@ frappe.ui.form.PrintView = class {
 				out.html = this.get_no_preview_html();
 			}
 
+			const $print_format = this.print_wrapper.find("iframe");
+			this.$print_format_body = $print_format.contents();
 			this.setup_print_format_dom(out, $print_format);
 
 			const print_height = $print_format.get(0).offsetHeight;
@@ -490,14 +488,13 @@ frappe.ui.form.PrintView = class {
 	show_footer() {
 		// footer is hidden by default as reqd by pdf generation
 		// simple hack to show it in print preview
-
 		this.$print_format_body.find("#footer-html").attr(
 			"style",
 			`
 			display: block !important;
 			order: 1;
 			margin-top: auto;
-			padding-top: var(--padding-xl)
+			padding-top: var(--padding-xl);
 		`
 		);
 	}

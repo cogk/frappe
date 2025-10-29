@@ -33,6 +33,7 @@ def get_print(
 	"""
 	import copy
 
+	from frappe.utils.data import now  # @dokos
 	from frappe.utils.pdf import get_pdf
 	from frappe.website.serve import get_response_without_exception_handling
 
@@ -64,6 +65,11 @@ def get_print(
 	finally:
 		local.form_dict = original_form_dict
 
+	# @dokos: Track each time a document is printed
+	doc = frappe.get_doc(doctype, name)
+	if doc.meta.track_print == 1 and doc._printed is None:
+		doc.db_set("_printed", now(), update_modified=False, commit=True)
+
 	if not as_pdf:
 		return html
 
@@ -86,7 +92,13 @@ def get_print(
 			if pdf:
 				return pdf
 
-	for hook in frappe.get_hooks("on_print_pdf"):
-		frappe.call(hook, doctype=doctype, name=name, print_format=print_format)
-
-	return get_pdf(html, options=pdf_options, output=output)
+	# @dokos: Cover pages
+	return get_pdf(
+		html,
+		options=pdf_options,
+		output=output,
+		cover=dict(
+			front=[frappe.db.get_value("Print Format", print_format, "cover_page")],
+			back=[frappe.db.get_value("Print Format", print_format, "cover_page_back")],
+		),
+	)

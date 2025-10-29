@@ -1,5 +1,6 @@
-# Copyright (c) 2017, Frappe Technologies and contributors
+# Copyright (c) 2021, Frappe Technologies and contributors
 # License: MIT. See LICENSE
+
 
 import json
 
@@ -22,11 +23,13 @@ class PrintFormat(Document):
 
 		absolute_value: DF.Check
 		align_labels_right: DF.Check
+		cover_page: DF.Link | None
+		cover_page_back: DF.Link | None
 		css: DF.Code | None
 		custom_format: DF.Check
 		default_print_language: DF.Link | None
 		disabled: DF.Check
-		doc_type: DF.Link | None
+		doc_type: DF.Link
 		font: DF.Data | None
 		font_size: DF.Int
 		format_data: DF.Code | None
@@ -43,14 +46,11 @@ class PrintFormat(Document):
 		pdf_generator: DF.Literal["wkhtmltopdf"]
 		print_format_builder: DF.Check
 		print_format_builder_beta: DF.Check
-		print_format_for: DF.Literal["DocType", "Report"]
 		print_format_type: DF.Literal["Jinja", "JS"]
 		raw_commands: DF.Code | None
 		raw_printing: DF.Check
-		report: DF.Link | None
 		show_section_headings: DF.Check
 		standard: DF.Literal["No", "Yes"]
-
 	# end: auto-generated types
 
 	def onload(self):
@@ -61,11 +61,6 @@ class PrintFormat(Document):
 		)
 		self.set_onload("print_templates", templates)
 
-	def before_save(self):
-		if self.print_format_for == "Report":
-			self.custom_format = 1
-			self.standard = "No"
-
 	def get_html(self, docname, letterhead=None):
 		return get_html(self.doc_type, docname, self.name, letterhead)
 
@@ -74,13 +69,20 @@ class PrintFormat(Document):
 
 	def validate(self):
 		if (
-			self.standard == "Yes"
+			(
+				self.standard == "Yes"
+				or (getattr(self, "_doc_before_save") and self._doc_before_save.standard == "Yes")
+			)
 			and not frappe.local.conf.get("developer_mode")
 			and not frappe.flags.in_migrate
 			and not frappe.flags.in_install
 			and not frappe.flags.in_test
 		):
-			frappe.throw(frappe._("Standard Print Format cannot be updated"))
+			if self._doc_before_save.disabled != self.disabled:
+				self.db_set("disabled", self.disabled)
+				self.reload()
+			else:
+				frappe.throw(frappe._("Standard Print Format cannot be updated"))
 
 		# old_doc_type is required for clearing item cache
 		self.old_doc_type = frappe.db.get_value("Print Format", self.name, "doc_type")
@@ -88,9 +90,7 @@ class PrintFormat(Document):
 		self.extract_images()
 
 		if not self.module:
-			doc_type = "DocType" if self.print_format_for == "DocType" else "Report"
-			document_name = self.doc_type if self.print_format_for == "DocType" else self.report
-			self.module = frappe.db.get_value(doc_type, document_name, "module")
+			self.module = frappe.db.get_value("DocType", self.doc_type, "module")
 
 		if self.html and self.print_format_type != "JS":
 			validate_template(self.html)
@@ -100,9 +100,6 @@ class PrintFormat(Document):
 
 		if self.custom_format and not self.html and not self.raw_printing:
 			frappe.throw(_("{0} is required").format(frappe.bold(_("HTML"))), frappe.MandatoryError)
-
-		if self.print_format_for == "Report" and not self.report:
-			frappe.throw(_("{0} is required").format(frappe.bold(_("Report"))), frappe.MandatoryError)
 
 	def extract_images(self):
 		from frappe.core.doctype.file.utils import extract_images_from_html
@@ -175,6 +172,6 @@ def make_default(name: str):
 
 	frappe.msgprint(
 		frappe._("{0} is now default print format for {1} doctype").format(
-			frappe.bold(name), frappe.bold(print_format.doc_type)
+			frappe.bold(name), frappe.bold(_(print_format.doc_type))
 		)
 	)
