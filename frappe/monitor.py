@@ -3,9 +3,11 @@
 
 import datetime
 import json
+import logging
 import os
 import traceback
 import uuid
+from logging.handlers import RotatingFileHandler
 
 import rq
 
@@ -14,7 +16,10 @@ from frappe.utils.data import cint
 from frappe.utils.synchronization import filelock
 
 MONITOR_REDIS_KEY = "monitor-transactions"
-MONITOR_MAX_ENTRIES = 1000000
+MONITOR_MAX_ENTRIES = 1_000_000
+MONITOR_LOGGER_NAME = "frappe.monitor"
+MONITOR_LOG_MAX_BYTES = MONITOR_MAX_ENTRIES * 350  # Average log size of 350 bytes
+MONITOR_LOG_FILE_COUNT = 10
 
 
 def start(transaction_type="request", method=None, kwargs=None):
@@ -42,6 +47,27 @@ def get_trace_id() -> str | None:
 
 def log_file():
 	return os.path.join(frappe.utils.get_bench_path(), "logs", "monitor.json.log")
+
+
+def _get_monitor_file_logger():
+	if logger := frappe.loggers.get(MONITOR_LOGGER_NAME):
+		return logger
+
+	logger = logging.getLogger(MONITOR_LOGGER_NAME)
+	logger.setLevel(logging.INFO)
+	logger.propagate = False
+
+	if not logger.handlers:
+		handler = RotatingFileHandler(
+			log_file(),
+			maxBytes=MONITOR_LOG_MAX_BYTES,
+			backupCount=MONITOR_LOG_FILE_COUNT,
+		)
+		handler.setFormatter(logging.Formatter("%(message)s"))
+		logger.addHandler(handler)
+
+	frappe.loggers[MONITOR_LOGGER_NAME] = logger
+	return logger
 
 
 class Monitor:
@@ -129,9 +155,9 @@ def flush():
 
 	logs = list(map(frappe.safe_decode, logs))
 	with filelock("monitor_flush", is_global=True, timeout=5):
-		with open(log_file(), "a") as f:
-			f.write("\n".join(logs))
-			f.write("\n")
+		logger = _get_monitor_file_logger()
+		for entry in logs:
+			logger.info(entry)
 
 	# Remove fetched entries from cache
 	frappe.cache.ltrim(MONITOR_REDIS_KEY, len(logs) - 1, -1)
