@@ -118,6 +118,7 @@ class EmailAccount(Document):
 		]
 		signature: DF.TextEditor | None
 		smtp_port: DF.Data | None
+		smtp_no_ehlo_after_auth: DF.Check
 		smtp_server: DF.Data | None
 		track_email_status: DF.Check
 		uidnext: DF.Int
@@ -383,6 +384,7 @@ class EmailAccount(Document):
 				"incoming_port": get_port(self),
 				"initial_sync_count": self.initial_sync_count or 100,
 				"use_oauth": self.auth_method == "OAuth",
+				"smtp_no_ehlo_after_auth": cint(self.smtp_no_ehlo_after_auth),
 				"access_token": oauth_token.get_password("access_token") if oauth_token else None,
 			}
 		)
@@ -608,6 +610,7 @@ class EmailAccount(Document):
 			"use_ssl": cint(self.use_ssl_for_outgoing),
 			"use_tls": cint(self.use_tls),
 			"use_oauth": self.auth_method == "OAuth",
+			"smtp_no_ehlo_after_auth": cint(self.smtp_no_ehlo_after_auth),
 			"access_token": self.get_access_token(),
 		}
 

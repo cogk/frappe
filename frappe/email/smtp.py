@@ -27,6 +27,7 @@ class SMTPServer:
 		use_oauth=0,
 		access_token=None,
 		timeout=2 * 60,
+		smtp_no_ehlo_after_auth=0,
 	):
 		self.login = login
 		self.email_account = email_account
@@ -39,6 +40,7 @@ class SMTPServer:
 		self.access_token = access_token
 		self._session = None
 		self.timeout = timeout
+		self.smtp_no_ehlo_after_auth = smtp_no_ehlo_after_auth
 
 		if not self.server:
 			frappe.msgprint(
@@ -93,7 +95,7 @@ class SMTPServer:
 					frappe.msgprint(res[1], raise_exception=frappe.OutgoingEmailError)
 
 			# Re-issue EHLO after AUTH to refresh server capabilities
-			if not frappe.conf.smtp_no_ehlo_after_auth:
+			if not (frappe.conf.smtp_no_ehlo_after_auth or self.smtp_no_ehlo_after_auth):
 				_session.ehlo()
 
 			self._session = _session
